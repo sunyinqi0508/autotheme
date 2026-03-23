@@ -1,0 +1,33 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.35717.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "winxsw-shared", "winxsw-shared.vcxproj", "{6C5B1B5C-6F6D-4C5A-90AF-5E2D0F7E4B21}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "winxsw-agent", "winxsw-agent.vcxproj", "{7E6D9281-1B9A-45A2-B151-2D3A8F51C702}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "winxsw-config", "winxsw-config.vcxproj", "{C4F7A81C-0B2D-4C91-9E56-6A0C0D3D4B75}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6C5B1B5C-6F6D-4C5A-90AF-5E2D0F7E4B21}.Debug|x64.ActiveCfg = Debug|x64
+		{6C5B1B5C-6F6D-4C5A-90AF-5E2D0F7E4B21}.Debug|x64.Build.0 = Debug|x64
+		{6C5B1B5C-6F6D-4C5A-90AF-5E2D0F7E4B21}.Release|x64.ActiveCfg = Release|x64
+		{6C5B1B5C-6F6D-4C5A-90AF-5E2D0F7E4B21}.Release|x64.Build.0 = Release|x64
+		{7E6D9281-1B9A-45A2-B151-2D3A8F51C702}.Debug|x64.ActiveCfg = Debug|x64
+		{7E6D9281-1B9A-45A2-B151-2D3A8F51C702}.Debug|x64.Build.0 = Debug|x64
+		{7E6D9281-1B9A-45A2-B151-2D3A8F51C702}.Release|x64.ActiveCfg = Release|x64
+		{7E6D9281-1B9A-45A2-B151-2D3A8F51C702}.Release|x64.Build.0 = Release|x64
+		{C4F7A81C-0B2D-4C91-9E56-6A0C0D3D4B75}.Debug|x64.ActiveCfg = Debug|x64
+		{C4F7A81C-0B2D-4C91-9E56-6A0C0D3D4B75}.Debug|x64.Build.0 = Debug|x64
+		{C4F7A81C-0B2D-4C91-9E56-6A0C0D3D4B75}.Release|x64.ActiveCfg = Release|x64
+		{C4F7A81C-0B2D-4C91-9E56-6A0C0D3D4B75}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
