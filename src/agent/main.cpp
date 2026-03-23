@@ -19,7 +19,8 @@ namespace winxsw {
 namespace {
 
 constexpr UINT_PTR kTimerId = 1;
-constexpr int kHotkeyId = 1;
+constexpr int kToggleHotkeyId = 1;
+constexpr int kLaunchConfigHotkeyId = 2;
 constexpr wchar_t kMutexName[] = L"Local\\WinXSwThemeAgentMutex";
 
 void AppendError(std::wstring& target, const std::wstring& message) {
@@ -74,17 +75,14 @@ public:
             return false;
         }
 
-        RebindHotkey();
+        RebindHotkeys();
         ResetTimer();
         Evaluate(true, true);
         return true;
     }
 
     void Shutdown() {
-        if (hotkeyRegistered_) {
-            UnregisterHotKey(hwnd_, kHotkeyId);
-            hotkeyRegistered_ = false;
-        }
+        UnregisterHotkeys();
         status_.agentRunning = false;
         SaveStatus(status_, nullptr);
     }
@@ -95,9 +93,11 @@ public:
             Evaluate(false, false);
             return 0;
         case WM_HOTKEY:
-            if (wParam == kHotkeyId) {
+            if (wParam == kToggleHotkeyId) {
                 Evaluate(false, false);
                 ToggleNow();
+            } else if (wParam == kLaunchConfigHotkeyId) {
+                LaunchConfigWindow();
             }
             return 0;
         case kAgentMessageReload:
@@ -148,7 +148,7 @@ private:
 
         settings_ = updated;
         EnsureAutostartEnabled(settings_.autostartEnabled, nullptr);
-        RebindHotkey();
+        RebindHotkeys();
         ResetTimer();
         Evaluate(true, true);
     }
@@ -162,20 +162,41 @@ private:
         SetTimer(hwnd_, kTimerId, interval, nullptr);
     }
 
-    void RebindHotkey() {
+    void UnregisterHotkeys() {
         if (hotkeyRegistered_) {
-            UnregisterHotKey(hwnd_, kHotkeyId);
+            UnregisterHotKey(hwnd_, kToggleHotkeyId);
             hotkeyRegistered_ = false;
         }
+        if (configHotkeyRegistered_) {
+            UnregisterHotKey(hwnd_, kLaunchConfigHotkeyId);
+            configHotkeyRegistered_ = false;
+        }
+    }
 
-        if (!settings_.hotkey.enabled || hwnd_ == nullptr) {
+    void RegisterConfiguredHotkey(const HotkeySettings& hotkey, int hotkeyId, bool& registered, const wchar_t* description) {
+        if (!hotkey.enabled || hwnd_ == nullptr) {
             return;
         }
 
-        if (RegisterHotKey(hwnd_, kHotkeyId, HotkeyModifiers(settings_.hotkey), settings_.hotkey.virtualKey)) {
-            hotkeyRegistered_ = true;
+        if (RegisterHotKey(hwnd_, hotkeyId, HotkeyModifiers(hotkey), hotkey.virtualKey)) {
+            registered = true;
         } else {
-            AppendError(lastError_, L"failed to register global hotkey " + FormatHotkey(settings_.hotkey));
+            AppendError(lastError_, std::wstring(L"failed to register ") + description + L" hotkey " + FormatHotkey(hotkey));
+        }
+    }
+
+    void RebindHotkeys() {
+        UnregisterHotkeys();
+
+        RegisterConfiguredHotkey(settings_.hotkey, kToggleHotkeyId, hotkeyRegistered_, L"manual toggle");
+        RegisterConfiguredHotkey(settings_.configHotkey, kLaunchConfigHotkeyId, configHotkeyRegistered_, L"launch config");
+    }
+
+    void LaunchConfigWindow() {
+        std::wstring error;
+        if (!LaunchConfig(&error)) {
+            AppendError(lastError_, error);
+            PersistStatus();
         }
     }
 
@@ -306,6 +327,7 @@ private:
             : L"";
         status_.lastAppliedTime = lastApplied_.has_value() ? FormatLocalTimestamp(*lastApplied_) : L"";
         status_.hotkeyText = FormatHotkey(settings_.hotkey);
+        status_.configHotkeyText = FormatHotkey(settings_.configHotkey);
         status_.lastError = lastError_;
         SaveStatus(status_, nullptr);
     }
@@ -320,6 +342,7 @@ private:
     ThemeMode manualOverrideMode_ = ThemeMode::Dark;
     std::wstring lastError_;
     bool hotkeyRegistered_ = false;
+    bool configHotkeyRegistered_ = false;
     bool manualOverrideActive_ = false;
     std::optional<std::chrono::system_clock::time_point> manualOverrideUntil_;
     std::optional<std::chrono::system_clock::time_point> lastLocationRefresh_;

@@ -42,6 +42,7 @@ struct Settings {
     int pollIntervalMinutes = 1;
     int locationRefreshMinutes = 360;
     HotkeySettings hotkey{};
+    HotkeySettings configHotkey{true, true, true, false, false, 'C'};
 };
 
 struct Status {
@@ -62,6 +63,7 @@ struct Status {
     std::wstring lastLocationRefresh;
     std::wstring lastAppliedTime;
     std::wstring hotkeyText;
+    std::wstring configHotkeyText;
     std::wstring lastError;
 };
 

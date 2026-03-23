@@ -35,7 +35,7 @@ constexpr UINT_PTR kRefreshTimerId = 1;
 constexpr int kTitleBarHeight = 56;
 constexpr int kContentTopOffset = -24;
 constexpr int kWindowWidth = 924;
-constexpr int kWindowHeight = 848;
+constexpr int kWindowHeight = 856;
 constexpr int kEditHeight = 26;
 constexpr int kCheckboxHeight = 22;
 constexpr int kTitleButtonHeight = 34;
@@ -67,6 +67,11 @@ struct UiPalette {
     COLORREF defaultButtonHover = RGB(30, 118, 200);
     COLORREF defaultButtonPressed = RGB(8, 86, 160);
     COLORREF defaultButtonText = RGB(255, 255, 255);
+    COLORREF modifierText = RGB(96, 107, 126);
+    COLORREF modifierHoverText = RGB(14, 102, 184);
+    COLORREF modifierCheckedText = RGB(23, 32, 48);
+    COLORREF modifierCheckedHoverText = RGB(8, 86, 160);
+    COLORREF modifierDisabledText = RGB(144, 154, 172);
 };
 
 UiPalette MakeUiPalette(ThemeMode mode) {
@@ -98,6 +103,11 @@ UiPalette MakeUiPalette(ThemeMode mode) {
         palette.defaultButtonHover = RGB(95, 180, 255);
         palette.defaultButtonPressed = RGB(54, 144, 236);
         palette.defaultButtonText = RGB(12, 18, 28);
+        palette.modifierText = RGB(160, 170, 186);
+        palette.modifierHoverText = RGB(120, 190, 255);
+        palette.modifierCheckedText = RGB(236, 240, 248);
+        palette.modifierCheckedHoverText = RGB(186, 224, 255);
+        palette.modifierDisabledText = RGB(118, 126, 140);
         return palette;
     }
 
@@ -127,6 +137,12 @@ enum ControlId : int {
     IdHotkeyShift,
     IdHotkeyWin,
     IdHotkeyKey,
+    IdConfigHotkeyEnable,
+    IdConfigHotkeyCtrl,
+    IdConfigHotkeyAlt,
+    IdConfigHotkeyShift,
+    IdConfigHotkeyWin,
+    IdConfigHotkeyKey,
     IdStatusBox,
     IdLightWallpaper,
     IdDarkWallpaper,
@@ -255,7 +271,7 @@ public:
         windowClass.hInstance = instance_;
         windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         windowClass.hbrBackground = nullptr;
-        windowClass.lpszClassName = L"WinXSwConfigWindow";
+        windowClass.lpszClassName = kConfigWindowClassName;
         RegisterClassExW(&windowClass);
 
         hwnd_ = CreateWindowExW(
@@ -355,13 +371,19 @@ private:
             RefreshVisualTheme();
             return 0;
         case WM_COMMAND:
-            return HandleCommand(LOWORD(wParam), reinterpret_cast<HWND>(lParam));
+            return HandleCommand(LOWORD(wParam), HIWORD(wParam), reinterpret_cast<HWND>(lParam));
         case WM_DRAWITEM:
             return HandleDrawItem(reinterpret_cast<const DRAWITEMSTRUCT*>(lParam));
         case WM_NOTIFY:
             return HandleNotify(reinterpret_cast<NMHDR*>(lParam));
         case WM_NCHITTEST:
             return HitTestWindow(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        case WM_SETCURSOR:
+            if (LOWORD(lParam) == HTCLIENT && IsModifierLabelControl(reinterpret_cast<HWND>(wParam))) {
+                SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                return TRUE;
+            }
+            break;
         case WM_TIMER:
             if (wParam == kRefreshTimerId) {
                 RefreshStatus();
@@ -496,6 +518,12 @@ private:
         hotkeyShift_ = nullptr;
         hotkeyWin_ = nullptr;
         hotkeyKey_ = nullptr;
+        configHotkeyEnable_ = nullptr;
+        configHotkeyCtrl_ = nullptr;
+        configHotkeyAlt_ = nullptr;
+        configHotkeyShift_ = nullptr;
+        configHotkeyWin_ = nullptr;
+        configHotkeyKey_ = nullptr;
         statusBox_ = nullptr;
         lightWallpaper_ = nullptr;
         darkWallpaper_ = nullptr;
@@ -530,6 +558,7 @@ private:
         if (sectionFont_ == nullptr) {
             sectionFont_ = CreateUiFont(hwnd_, 12, FW_NORMAL, L"Segoe UI");
             bodyFont_ = CreateUiFont(hwnd_, 10, FW_NORMAL, L"Segoe UI");
+            bodyBoldFont_ = CreateUiFont(hwnd_, 10, FW_SEMIBOLD, L"Segoe UI");
             hintFont_ = CreateUiFont(hwnd_, 9, FW_NORMAL, L"Segoe UI");
             buttonFont_ = CreateUiFont(hwnd_, 10, FW_LIGHT, L"Segoe UI");
             statusFont_ = CreateUiFont(hwnd_, 10, FW_NORMAL, L"Cascadia Mono");
@@ -555,13 +584,14 @@ private:
     }
 
     void DestroyThemeResources() {
-        for (auto font : {sectionFont_, bodyFont_, hintFont_, buttonFont_, statusFont_}) {
+        for (auto font : {sectionFont_, bodyFont_, bodyBoldFont_, hintFont_, buttonFont_, statusFont_}) {
             if (font != nullptr) {
                 DeleteObject(font);
             }
         }
         sectionFont_ = nullptr;
         bodyFont_ = nullptr;
+        bodyBoldFont_ = nullptr;
         hintFont_ = nullptr;
         buttonFont_ = nullptr;
         statusFont_ = nullptr;
@@ -842,7 +872,7 @@ private:
             s(kEditHeight));
 
         hotkeyTitle_ = CreateTextLabel(
-            L"Offsets and manual override",
+            L"Offsets and shortcuts",
             hotkeyCard.left + leftMargin,
             hotkeyCard.top + s(18),
             s(260),
@@ -850,10 +880,10 @@ private:
             sectionFont_,
             sectionLabels_);
         hotkeyHint_ = CreateTextLabel(
-            L"Tune the schedule and configure a quick manual toggle shortcut.",
+            L"Set offsets plus global toggle and config shortcuts.",
             hotkeyCard.left + leftMargin,
             hotkeyCard.top + s(46),
-            s(300),
+            s(320),
             s(18),
             hintFont_,
             hintLabels_);
@@ -863,36 +893,64 @@ private:
         CreateFieldLabel(L"Sunset offset", hotkeyCard.left + leftMargin, hotkeyCard.top + s(110));
         sunsetOffset_ = CreateEdit(IdSunsetOffset, hotkeyCard.left + s(182), hotkeyCard.top + s(106), s(72), s(kEditHeight));
         CreateHintText(L"minutes", hotkeyCard.left + s(264), hotkeyCard.top + s(112), s(80));
+        const int shortcutLeft = hotkeyCard.left + s(20);
+        const int shortcutRight = hotkeyCard.left + s(198);
+        const int shortcutLabelTop = hotkeyCard.top + s(146);
+        const int shortcutKeyTop = hotkeyCard.top + s(180);
+        const int shortcutComboTop = hotkeyCard.top + s(176);
+        const int shortcutModifierTop = hotkeyCard.top + s(204);
+        configHotkeyEnable_ = CreateCheckBox(
+            IdConfigHotkeyEnable,
+            L"Launch config hotkey",
+            shortcutLeft,
+            shortcutLabelTop,
+            s(164),
+            s(kCheckboxHeight));
         hotkeyEnable_ = CreateCheckBox(
             IdHotkeyEnable,
-            L"Enable a global manual toggle shortcut",
-            hotkeyCard.left + leftMargin,
-            hotkeyCard.top + s(142),
-            s(300),
+            L"Toggle Dark/Light",
+            shortcutRight,
+            shortcutLabelTop,
+            s(164),
             s(kCheckboxHeight));
-        hotkeyCtrl_ = CreateCheckBox(IdHotkeyCtrl, L"Ctrl", hotkeyCard.left + s(36), hotkeyCard.top + s(172), s(56), s(kCheckboxHeight));
-        hotkeyAlt_ = CreateCheckBox(IdHotkeyAlt, L"Alt", hotkeyCard.left + s(96), hotkeyCard.top + s(172), s(56), s(kCheckboxHeight));
-        hotkeyShift_ = CreateCheckBox(IdHotkeyShift, L"Shift", hotkeyCard.left + s(156), hotkeyCard.top + s(172), s(62), s(kCheckboxHeight));
-        hotkeyWin_ = CreateCheckBox(IdHotkeyWin, L"Win", hotkeyCard.left + s(224), hotkeyCard.top + s(172), s(56), s(kCheckboxHeight));
-        CreateFieldLabel(L"Key", hotkeyCard.left + s(36), hotkeyCard.top + s(202));
+        CreateFieldLabel(L"Key", shortcutLeft, shortcutKeyTop);
+        CreateFieldLabel(L"Key", shortcutRight, shortcutKeyTop);
+        configHotkeyKey_ = CreateWindowExW(
+            WS_EX_CLIENTEDGE,
+            L"COMBOBOX",
+            nullptr,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
+            shortcutLeft + s(36),
+            shortcutComboTop,
+            s(110),
+            s(240),
+            hwnd_,
+            reinterpret_cast<HMENU>(IdConfigHotkeyKey),
+            instance_,
+            nullptr);
+        PopulateHotkeyKeyCombo(configHotkeyKey_);
         hotkeyKey_ = CreateWindowExW(
             WS_EX_CLIENTEDGE,
             L"COMBOBOX",
             nullptr,
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
-            hotkeyCard.left + s(88),
-            hotkeyCard.top + s(198),
-            s(140),
+            shortcutRight + s(36),
+            shortcutComboTop,
+            s(110),
             s(240),
             hwnd_,
             reinterpret_cast<HMENU>(IdHotkeyKey),
             instance_,
             nullptr);
-        SendMessageW(hotkeyKey_, WM_SETFONT, reinterpret_cast<WPARAM>(bodyFont_), TRUE);
-        for (const auto& entry : AvailableHotkeyKeys()) {
-            const auto index = static_cast<int>(SendMessageW(hotkeyKey_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.second.c_str())));
-            SendMessageW(hotkeyKey_, CB_SETITEMDATA, index, entry.first);
-        }
+        PopulateHotkeyKeyCombo(hotkeyKey_);
+        configHotkeyCtrl_ = CreateModifierToggle(IdConfigHotkeyCtrl, L"Ctrl", shortcutLeft, shortcutModifierTop, s(24), s(kCheckboxHeight));
+        configHotkeyAlt_ = CreateModifierToggle(IdConfigHotkeyAlt, L"Alt", shortcutLeft + s(40), shortcutModifierTop, s(20), s(kCheckboxHeight));
+        configHotkeyShift_ = CreateModifierToggle(IdConfigHotkeyShift, L"Shift", shortcutLeft + s(76), shortcutModifierTop, s(30), s(kCheckboxHeight));
+        configHotkeyWin_ = CreateModifierToggle(IdConfigHotkeyWin, L"Win", shortcutLeft + s(122), shortcutModifierTop, s(24), s(kCheckboxHeight));
+        hotkeyCtrl_ = CreateModifierToggle(IdHotkeyCtrl, L"Ctrl", shortcutRight, shortcutModifierTop, s(24), s(kCheckboxHeight));
+        hotkeyAlt_ = CreateModifierToggle(IdHotkeyAlt, L"Alt", shortcutRight + s(40), shortcutModifierTop, s(20), s(kCheckboxHeight));
+        hotkeyShift_ = CreateModifierToggle(IdHotkeyShift, L"Shift", shortcutRight + s(76), shortcutModifierTop, s(30), s(kCheckboxHeight));
+        hotkeyWin_ = CreateModifierToggle(IdHotkeyWin, L"Win", shortcutRight + s(122), shortcutModifierTop, s(24), s(kCheckboxHeight));
 
         statusTitle_ = CreateTextLabel(
             L"Current status",
@@ -981,11 +1039,17 @@ private:
         openFolderButton_ = CreateActionButton(IdOpenFolder, L"Open Data Folder", s(700), s(814 + kContentTopOffset), s(140), s(34), false);
     }
 
-    LRESULT HandleCommand(int id, HWND) {
+    LRESULT HandleCommand(int id, int notifyCode, HWND control) {
+        if (notifyCode == BN_CLICKED && IsModifierLabelControl(control)) {
+            ToggleCheckbox(control);
+            return 0;
+        }
+
         switch (id) {
         case IdLocationAuto:
         case IdLocationManual:
         case IdHotkeyEnable:
+        case IdConfigHotkeyEnable:
             UpdateEnabledState();
             return 0;
         case IdSave:
@@ -1044,12 +1108,15 @@ private:
         SetText(sunsetOffset_, std::to_wstring(settings_.sunsetOffsetMinutes));
         SetText(pollInterval_, std::to_wstring(settings_.pollIntervalMinutes));
         SetText(locationRefresh_, std::to_wstring(settings_.locationRefreshMinutes));
-        SetCheck(hotkeyEnable_, settings_.hotkey.enabled);
-        SetCheck(hotkeyCtrl_, settings_.hotkey.ctrl);
-        SetCheck(hotkeyAlt_, settings_.hotkey.alt);
-        SetCheck(hotkeyShift_, settings_.hotkey.shift);
-        SetCheck(hotkeyWin_, settings_.hotkey.win);
-        SelectHotkeyKey(settings_.hotkey.virtualKey);
+        ApplyHotkeyToControls(settings_.hotkey, hotkeyEnable_, hotkeyCtrl_, hotkeyAlt_, hotkeyShift_, hotkeyWin_, hotkeyKey_);
+        ApplyHotkeyToControls(
+            settings_.configHotkey,
+            configHotkeyEnable_,
+            configHotkeyCtrl_,
+            configHotkeyAlt_,
+            configHotkeyShift_,
+            configHotkeyWin_,
+            configHotkeyKey_);
         UpdateEnabledState();
     }
 
@@ -1062,11 +1129,6 @@ private:
         updated.allowIpFallback = GetCheck(allowIp_);
         updated.lightWallpaperPath = ReadControlText(lightWallpaper_);
         updated.darkWallpaperPath = ReadControlText(darkWallpaper_);
-        updated.hotkey.enabled = GetCheck(hotkeyEnable_);
-        updated.hotkey.ctrl = GetCheck(hotkeyCtrl_);
-        updated.hotkey.alt = GetCheck(hotkeyAlt_);
-        updated.hotkey.shift = GetCheck(hotkeyShift_);
-        updated.hotkey.win = GetCheck(hotkeyWin_);
 
         if (!ParseInt(ReadControlText(pollInterval_), updated.pollIntervalMinutes)) {
             error = L"Poll interval must be an integer.";
@@ -1089,21 +1151,34 @@ private:
             }
         }
 
-        if (updated.hotkey.enabled &&
-            !updated.hotkey.ctrl &&
-            !updated.hotkey.alt &&
-            !updated.hotkey.shift &&
-            !updated.hotkey.win) {
-            error = L"Enable at least one hotkey modifier.";
+        if (!CollectHotkeyFromControls(
+                updated.hotkey,
+                hotkeyEnable_,
+                hotkeyCtrl_,
+                hotkeyAlt_,
+                hotkeyShift_,
+                hotkeyWin_,
+                hotkeyKey_,
+                L"manual toggle",
+                error)) {
             return false;
         }
-
-        const auto selected = static_cast<int>(SendMessageW(hotkeyKey_, CB_GETCURSEL, 0, 0));
-        if (selected == CB_ERR) {
-            error = L"Choose a hotkey key.";
+        if (!CollectHotkeyFromControls(
+                updated.configHotkey,
+                configHotkeyEnable_,
+                configHotkeyCtrl_,
+                configHotkeyAlt_,
+                configHotkeyShift_,
+                configHotkeyWin_,
+                configHotkeyKey_,
+                L"launch config",
+                error)) {
             return false;
         }
-        updated.hotkey.virtualKey = static_cast<UINT>(SendMessageW(hotkeyKey_, CB_GETITEMDATA, selected, 0));
+        if (HotkeysConflict(updated.hotkey, updated.configHotkey)) {
+            error = L"Manual toggle and launch config hotkeys must be different.";
+            return false;
+        }
 
         updated.pollIntervalMinutes = std::clamp(updated.pollIntervalMinutes, 1, 60);
         updated.locationRefreshMinutes = std::clamp(updated.locationRefreshMinutes, 15, 1440);
@@ -1191,6 +1266,12 @@ private:
     void RefreshStatus() {
         LoadStatus(status_, nullptr);
         status_.agentRunning = IsAgentRunning();
+        if (status_.hotkeyText.empty()) {
+            status_.hotkeyText = FormatHotkey(settings_.hotkey);
+        }
+        if (status_.configHotkeyText.empty()) {
+            status_.configHotkeyText = FormatHotkey(settings_.configHotkey);
+        }
         std::wstring text;
         text += L"Theme status\r\n";
         text += L"------------\r\n";
@@ -1198,7 +1279,8 @@ private:
         AppendStatusLine(text, L"Current mode", status_.currentMode);
         AppendStatusLine(text, L"Desired mode", status_.desiredMode);
         AppendStatusLine(text, L"Auto switch", YesNo(status_.autoSwitchEnabled));
-        AppendStatusLine(text, L"Hotkey", status_.hotkeyText);
+        AppendStatusLine(text, L"Toggle hotkey", status_.hotkeyText);
+        AppendStatusLine(text, L"Config hotkey", status_.configHotkeyText);
 
         text += L"\r\nLocation\r\n";
         text += L"--------\r\n";
@@ -1246,12 +1328,20 @@ private:
         EnableWindow(allowIp_, !manual);
         UpdateLocationCoordinateDisplay();
 
-        const auto hotkeyEnabled = GetCheck(hotkeyEnable_);
-        EnableWindow(hotkeyCtrl_, hotkeyEnabled);
-        EnableWindow(hotkeyAlt_, hotkeyEnabled);
-        EnableWindow(hotkeyShift_, hotkeyEnabled);
-        EnableWindow(hotkeyWin_, hotkeyEnabled);
-        EnableWindow(hotkeyKey_, hotkeyEnabled);
+        UpdateHotkeyEnabledState(
+            hotkeyEnable_,
+            hotkeyCtrl_,
+            hotkeyAlt_,
+            hotkeyShift_,
+            hotkeyWin_,
+            hotkeyKey_);
+        UpdateHotkeyEnabledState(
+            configHotkeyEnable_,
+            configHotkeyCtrl_,
+            configHotkeyAlt_,
+            configHotkeyShift_,
+            configHotkeyWin_,
+            configHotkeyKey_);
 
         RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
     }
@@ -1418,7 +1508,7 @@ private:
         const wchar_t* surfaceTheme = palette_.dark ? L"DarkMode_Explorer" : L"Explorer";
         for (auto control : {
                  latitude_, longitude_, sunriseOffset_, sunsetOffset_, pollInterval_, locationRefresh_,
-                 hotkeyKey_, statusBox_, lightWallpaper_, darkWallpaper_}) {
+                 hotkeyKey_, configHotkeyKey_, statusBox_, lightWallpaper_, darkWallpaper_}) {
             if (control != nullptr) {
                 SetWindowTheme(control, surfaceTheme, nullptr);
             }
@@ -1426,7 +1516,7 @@ private:
 
         for (auto control : {
                  autoSwitch_, autostart_, locationAuto_, locationManual_, allowGps_, allowIp_,
-                 hotkeyEnable_, hotkeyCtrl_, hotkeyAlt_, hotkeyShift_, hotkeyWin_}) {
+                 hotkeyEnable_, configHotkeyEnable_}) {
             if (control != nullptr) {
                 SetWindowTheme(control, surfaceTheme, nullptr);
             }
@@ -1441,10 +1531,18 @@ private:
             control == allowGps_ ||
             control == allowIp_ ||
             control == hotkeyEnable_ ||
-            control == hotkeyCtrl_ ||
+            control == configHotkeyEnable_;
+    }
+
+    bool IsModifierLabelControl(HWND control) const {
+        return control == hotkeyCtrl_ ||
             control == hotkeyAlt_ ||
             control == hotkeyShift_ ||
-            control == hotkeyWin_;
+            control == hotkeyWin_ ||
+            control == configHotkeyCtrl_ ||
+            control == configHotkeyAlt_ ||
+            control == configHotkeyShift_ ||
+            control == configHotkeyWin_;
     }
 
     bool IsActionButton(HWND control) const {
@@ -1626,12 +1724,62 @@ private:
     }
 
     LRESULT HandleDrawItem(const DRAWITEMSTRUCT* draw) {
-        if (draw == nullptr || draw->CtlType != ODT_BUTTON || !IsActionButton(draw->hwndItem)) {
+        if (draw == nullptr || draw->CtlType != ODT_BUTTON) {
+            return FALSE;
+        }
+
+        if (IsModifierLabelControl(draw->hwndItem)) {
+            DrawModifierLabel(*draw);
+            return TRUE;
+        }
+        if (!IsActionButton(draw->hwndItem)) {
             return FALSE;
         }
 
         DrawActionButton(*draw);
         return TRUE;
+    }
+
+    void DrawModifierLabel(const DRAWITEMSTRUCT& draw) {
+        RECT rect = draw.rcItem;
+        FillRect(draw.hDC, &rect, cardBrush_);
+
+        const auto control = draw.hwndItem;
+        const auto itemState = draw.itemState;
+        const bool checked = GetCheck(control);
+        const bool disabled = (itemState & ODS_DISABLED) != 0;
+        const bool hot = (itemState & ODS_HOTLIGHT) != 0;
+        const bool focused = (itemState & ODS_FOCUS) != 0;
+
+        COLORREF foreground = palette_.modifierText;
+        if (disabled) {
+            foreground = palette_.modifierDisabledText;
+        } else if (checked && hot) {
+            foreground = palette_.modifierCheckedHoverText;
+        } else if (checked) {
+            foreground = palette_.modifierCheckedText;
+        } else if (hot) {
+            foreground = palette_.modifierHoverText;
+        }
+
+        RECT textRect = rect;
+        SetBkMode(draw.hDC, TRANSPARENT);
+        SetTextColor(draw.hDC, foreground);
+        const auto previousFont = SelectObject(draw.hDC, checked ? bodyBoldFont_ : bodyFont_);
+        const auto text = ReadControlText(control);
+        DrawTextW(
+            draw.hDC,
+            text.c_str(),
+            -1,
+            &textRect,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+        SelectObject(draw.hDC, previousFont);
+
+        if (focused) {
+            RECT focusRect = rect;
+            focusRect.right = std::min(rect.right, rect.left + Scale(4) + static_cast<int>(text.size()) * Scale(8));
+            DrawFocusRect(draw.hDC, &focusRect);
+        }
     }
 
     HBRUSH BackgroundBrushForActionButton(HWND control) const {
@@ -1783,6 +1931,25 @@ private:
         return box;
     }
 
+    HWND CreateModifierToggle(int id, const wchar_t* text, int x, int y, int width, int height) {
+        const auto toggle = CreateWindowExW(
+            0,
+            L"BUTTON",
+            text,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW | BS_NOTIFY,
+            x,
+            y,
+            width,
+            height,
+            hwnd_,
+            reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),
+            instance_,
+            nullptr);
+        SendMessageW(toggle, WM_SETFONT, reinterpret_cast<WPARAM>(bodyFont_), TRUE);
+        SetPropW(toggle, L"WinXSwModifierChecked", reinterpret_cast<HANDLE>(static_cast<INT_PTR>(FALSE)));
+        return toggle;
+    }
+
     HWND CreateRadio(int id, const wchar_t* text, int x, int y, int width, int height, bool startsGroup) {
         DWORD style = WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_NOTIFY | BS_AUTORADIOBUTTON;
         if (startsGroup) {
@@ -1864,22 +2031,122 @@ private:
     }
 
     void SetCheck(HWND window, bool checked) {
+        if (IsModifierLabelControl(window)) {
+            SetPropW(window, L"WinXSwModifierChecked", reinterpret_cast<HANDLE>(static_cast<INT_PTR>(checked ? TRUE : FALSE)));
+            InvalidateRect(window, nullptr, TRUE);
+            return;
+        }
         SendMessageW(window, BM_SETCHECK, checked ? BST_CHECKED : BST_UNCHECKED, 0);
     }
 
     bool GetCheck(HWND window) const {
+        if (IsModifierLabelControl(window)) {
+            return reinterpret_cast<INT_PTR>(GetPropW(window, L"WinXSwModifierChecked")) != 0;
+        }
         return SendMessageW(window, BM_GETCHECK, 0, 0) == BST_CHECKED;
     }
 
-    void SelectHotkeyKey(UINT virtualKey) {
-        const auto count = static_cast<int>(SendMessageW(hotkeyKey_, CB_GETCOUNT, 0, 0));
+    void ToggleCheckbox(HWND window) {
+        SetCheck(window, !GetCheck(window));
+        SetFocus(window);
+    }
+
+    void PopulateHotkeyKeyCombo(HWND combo) {
+        SendMessageW(combo, WM_SETFONT, reinterpret_cast<WPARAM>(bodyFont_), TRUE);
+        for (const auto& entry : AvailableHotkeyKeys()) {
+            const auto index = static_cast<int>(SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.second.c_str())));
+            SendMessageW(combo, CB_SETITEMDATA, index, entry.first);
+        }
+    }
+
+    void ApplyHotkeyToControls(
+        const HotkeySettings& hotkey,
+        HWND enable,
+        HWND ctrl,
+        HWND alt,
+        HWND shift,
+        HWND win,
+        HWND combo) {
+        SetCheck(enable, hotkey.enabled);
+        SetCheck(ctrl, hotkey.ctrl);
+        SetCheck(alt, hotkey.alt);
+        SetCheck(shift, hotkey.shift);
+        SetCheck(win, hotkey.win);
+        SelectHotkeyKey(combo, hotkey.virtualKey);
+    }
+
+    bool CollectHotkeyFromControls(
+        HotkeySettings& hotkey,
+        HWND enable,
+        HWND ctrl,
+        HWND alt,
+        HWND shift,
+        HWND win,
+        HWND combo,
+        const wchar_t* displayName,
+        std::wstring& error) const {
+        hotkey.enabled = GetCheck(enable);
+        hotkey.ctrl = GetCheck(ctrl);
+        hotkey.alt = GetCheck(alt);
+        hotkey.shift = GetCheck(shift);
+        hotkey.win = GetCheck(win);
+
+        if (hotkey.enabled &&
+            !hotkey.ctrl &&
+            !hotkey.alt &&
+            !hotkey.shift &&
+            !hotkey.win) {
+            error = std::wstring(L"Enable at least one modifier for the ") + displayName + L" hotkey.";
+            return false;
+        }
+
+        const auto selected = static_cast<int>(SendMessageW(combo, CB_GETCURSEL, 0, 0));
+        if (selected == CB_ERR) {
+            error = std::wstring(L"Choose a key for the ") + displayName + L" hotkey.";
+            return false;
+        }
+        hotkey.virtualKey = static_cast<UINT>(SendMessageW(combo, CB_GETITEMDATA, selected, 0));
+        return true;
+    }
+
+    static bool HotkeysConflict(const HotkeySettings& left, const HotkeySettings& right) {
+        return left.enabled &&
+            right.enabled &&
+            left.ctrl == right.ctrl &&
+            left.alt == right.alt &&
+            left.shift == right.shift &&
+            left.win == right.win &&
+            left.virtualKey == right.virtualKey;
+    }
+
+    void UpdateHotkeyEnabledState(
+        HWND enable,
+        HWND ctrl,
+        HWND alt,
+        HWND shift,
+        HWND win,
+        HWND combo) {
+        const auto enabled = GetCheck(enable);
+        EnableWindow(ctrl, enabled);
+        EnableWindow(alt, enabled);
+        EnableWindow(shift, enabled);
+        EnableWindow(win, enabled);
+        EnableWindow(combo, enabled);
+        InvalidateRect(ctrl, nullptr, TRUE);
+        InvalidateRect(alt, nullptr, TRUE);
+        InvalidateRect(shift, nullptr, TRUE);
+        InvalidateRect(win, nullptr, TRUE);
+    }
+
+    void SelectHotkeyKey(HWND combo, UINT virtualKey) {
+        const auto count = static_cast<int>(SendMessageW(combo, CB_GETCOUNT, 0, 0));
         for (int i = 0; i < count; ++i) {
-            if (static_cast<UINT>(SendMessageW(hotkeyKey_, CB_GETITEMDATA, i, 0)) == virtualKey) {
-                SendMessageW(hotkeyKey_, CB_SETCURSEL, i, 0);
+            if (static_cast<UINT>(SendMessageW(combo, CB_GETITEMDATA, i, 0)) == virtualKey) {
+                SendMessageW(combo, CB_SETCURSEL, i, 0);
                 return;
             }
         }
-        SendMessageW(hotkeyKey_, CB_SETCURSEL, 0, 0);
+        SendMessageW(combo, CB_SETCURSEL, 0, 0);
     }
 
     HINSTANCE instance_ = nullptr;
@@ -1892,6 +2159,7 @@ private:
 
     HFONT sectionFont_ = nullptr;
     HFONT bodyFont_ = nullptr;
+    HFONT bodyBoldFont_ = nullptr;
     HFONT hintFont_ = nullptr;
     HFONT buttonFont_ = nullptr;
     HFONT statusFont_ = nullptr;
@@ -1947,6 +2215,12 @@ private:
     HWND hotkeyShift_ = nullptr;
     HWND hotkeyWin_ = nullptr;
     HWND hotkeyKey_ = nullptr;
+    HWND configHotkeyEnable_ = nullptr;
+    HWND configHotkeyCtrl_ = nullptr;
+    HWND configHotkeyAlt_ = nullptr;
+    HWND configHotkeyShift_ = nullptr;
+    HWND configHotkeyWin_ = nullptr;
+    HWND configHotkeyKey_ = nullptr;
     HWND statusBox_ = nullptr;
     HWND lightWallpaper_ = nullptr;
     HWND darkWallpaper_ = nullptr;

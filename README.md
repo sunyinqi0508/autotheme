@@ -15,13 +15,13 @@ Developed in collaboration with ChatGPT 5.4
   - Switches Windows app and system theme values between light and dark.
   - Computes sunrise and sunset locally from latitude and longitude.
   - Uses GPS through the Windows location stack first, then falls back to direct no-proxy IP geolocation.
-  - Registers a global hotkey for manual toggling.
+  - Registers global hotkeys for manual toggling and opening the config app.
 
 - `winxsw-config.exe`
   - Separate native Win32 configuration GUI.
   - Edits `settings.json`.
   - Shows current runtime status from `status.json`.
-  - Can save settings, launch the agent, trigger a manual toggle, and open the data folder.
+  - Can save settings, configure both global hotkeys, launch the agent, trigger a manual toggle, and open the data folder.
 
 
 ## Solution
@@ -55,3 +55,4 @@ The app stores data in `%LOCALAPPDATA%\WinXSwTheme`:
 - GPS enabled.
 - IP fallback enabled.
 - Global hotkey: `Ctrl+Alt+D`.
+- Config hotkey: `Ctrl+Alt+C`.

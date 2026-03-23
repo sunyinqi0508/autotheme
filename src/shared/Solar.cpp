@@ -114,32 +114,20 @@ SolarEventResult ComputeSolarEventUtc(
     const auto localMeanTime = hourAngle + rightAscension - (0.06571 * approximateTime) - 6.622;
     const auto utcHour = NormalizeHours(localMeanTime - longitudeHour);
     const auto offsetHours = static_cast<double>(GetTimezoneOffsetMinutesForLocalDate(yearValue, monthValue, dayValue)) / 60.0;
-    auto localHours = utcHour + offsetHours;
-    localHours += static_cast<double>(offsetMinutes) / 60.0;
-
-    int dayAdjustment = 0;
-    while (localHours < 0.0) {
-        localHours += 24.0;
-        --dayAdjustment;
-    }
-    while (localHours >= 24.0) {
-        localHours -= 24.0;
-        ++dayAdjustment;
-    }
+    const auto localHours = NormalizeHours(
+        utcHour +
+        offsetHours +
+        (static_cast<double>(offsetMinutes) / 60.0));
 
     using namespace std::chrono;
-    const auto baseDate = sys_days(
-        year{yearValue} / month{static_cast<unsigned>(monthValue)} / day{static_cast<unsigned>(dayValue)}) +
-        days(dayAdjustment);
-    const year_month_day adjustedDate{baseDate};
     const auto totalMinutes = localHours * 60.0;
     const auto wholeMinutes = static_cast<int>(std::floor(totalMinutes));
     const auto seconds = static_cast<int>(std::round((totalMinutes - wholeMinutes) * 60.0));
 
     result.value = LocalDateTimeToUtc(
-        static_cast<int>(adjustedDate.year()),
-        static_cast<unsigned>(adjustedDate.month()),
-        static_cast<unsigned>(adjustedDate.day()),
+        yearValue,
+        monthValue,
+        dayValue,
         wholeMinutes / 60,
         wholeMinutes % 60,
         seconds);

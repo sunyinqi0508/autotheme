@@ -151,6 +151,10 @@ bool LoadSettings(Settings& settings, std::wstring* error) {
         LoadHotkeyObject(object.GetNamedObject(L"hotkey"), settings.hotkey);
     } catch (...) {
     }
+    try {
+        LoadHotkeyObject(object.GetNamedObject(L"configHotkey"), settings.configHotkey);
+    } catch (...) {
+    }
 
     return true;
 }
@@ -172,6 +176,7 @@ bool SaveSettings(const Settings& settings, std::wstring* error) {
     object.SetNamedValue(L"pollIntervalMinutes", JsonValue::CreateNumberValue(settings.pollIntervalMinutes));
     object.SetNamedValue(L"locationRefreshMinutes", JsonValue::CreateNumberValue(settings.locationRefreshMinutes));
     object.SetNamedValue(L"hotkey", MakeHotkeyObject(settings.hotkey));
+    object.SetNamedValue(L"configHotkey", MakeHotkeyObject(settings.configHotkey));
     return WriteJsonFile(GetSettingsPath(), object, error);
 }
 
@@ -207,6 +212,7 @@ bool LoadStatus(Status& status, std::wstring* error) {
     status.lastLocationRefresh = GetStringOr(object, L"lastLocationRefresh", L"");
     status.lastAppliedTime = GetStringOr(object, L"lastAppliedTime", L"");
     status.hotkeyText = GetStringOr(object, L"hotkeyText", L"");
+    status.configHotkeyText = GetStringOr(object, L"configHotkeyText", L"");
     status.lastError = GetStringOr(object, L"lastError", L"");
     return true;
 }
@@ -230,6 +236,7 @@ bool SaveStatus(const Status& status, std::wstring* error) {
     object.SetNamedValue(L"lastLocationRefresh", JsonValue::CreateStringValue(status.lastLocationRefresh));
     object.SetNamedValue(L"lastAppliedTime", JsonValue::CreateStringValue(status.lastAppliedTime));
     object.SetNamedValue(L"hotkeyText", JsonValue::CreateStringValue(status.hotkeyText));
+    object.SetNamedValue(L"configHotkeyText", JsonValue::CreateStringValue(status.configHotkeyText));
     object.SetNamedValue(L"lastError", JsonValue::CreateStringValue(status.lastError));
     return WriteJsonFile(GetStatusPath(), object, error);
 }

@@ -212,4 +212,33 @@ bool LaunchAgent(std::wstring* error) {
     return true;
 }
 
+bool LaunchConfig(std::wstring* error) {
+    const auto window = FindWindowW(kConfigWindowClassName, nullptr);
+    if (window != nullptr) {
+        if (IsIconic(window)) {
+            ShowWindow(window, SW_RESTORE);
+        } else {
+            ShowWindow(window, SW_SHOW);
+        }
+        SetForegroundWindow(window);
+        return true;
+    }
+
+    const auto executable = GetConfigExecutablePath();
+    const auto result = ShellExecuteW(
+        nullptr,
+        L"open",
+        executable.c_str(),
+        nullptr,
+        executable.parent_path().c_str(),
+        SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(result) <= 32) {
+        if (error != nullptr) {
+            *error = L"failed to launch winxsw-config.exe";
+        }
+        return false;
+    }
+    return true;
+}
+
 }  // namespace winxsw

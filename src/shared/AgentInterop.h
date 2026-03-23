@@ -12,6 +12,7 @@
 namespace winxsw {
 
 inline constexpr wchar_t kAgentWindowClassName[] = L"WinXSwThemeAgentWindow";
+inline constexpr wchar_t kConfigWindowClassName[] = L"WinXSwConfigWindow";
 inline constexpr wchar_t kRunValueName[] = L"WinXSwThemeAgent";
 inline constexpr UINT kAgentMessageReload = WM_APP + 101;
 inline constexpr UINT kAgentMessageToggle = WM_APP + 102;
@@ -30,5 +31,6 @@ bool NotifyAgent(UINT message);
 bool IsAgentRunning();
 bool StopAgent(std::wstring* error = nullptr);
 bool LaunchAgent(std::wstring* error = nullptr);
+bool LaunchConfig(std::wstring* error = nullptr);
 
 }  // namespace winxsw
