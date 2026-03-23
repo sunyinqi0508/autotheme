@@ -6,6 +6,7 @@ Automatically switch between system wide dark and light theme based on local sun
 
 Developed in collaboration with ChatGPT 5.4
 
+![Preview](preview.png)
 ## What it includes
 
 - `winxsw-agent.exe`
